@@ -14,13 +14,13 @@ import (
 	"github.com/commit-app-playground/Hashchat/restapi/operations/hashtags"
 )
 
-//go:generate swagger generate server --target ../../Hashchat --name Hashtag --spec ../swagger/swagger.yml --principal models.Principal --exclude-main
+//go:generate swagger generate server --target ../../Hashchat --name Hashchat --spec ../swagger/swagger.yml --principal models.Principal --exclude-main
 
-func configureFlags(api *operations.HashtagAPI) {
+func configureFlags(api *operations.HashchatAPI) {
 	// api.CommandLineOptionsGroups = []swag.CommandLineOptionsGroup{ ... }
 }
 
-func configureAPI(api *operations.HashtagAPI) http.Handler {
+func configureAPI(api *operations.HashchatAPI) http.Handler {
 	// configure the api here
 	api.ServeError = errors.ServeError
 
@@ -42,9 +42,11 @@ func configureAPI(api *operations.HashtagAPI) http.Handler {
 
 	api.HashtagsGetHashtagMessagesHandler = hashtags.GetHashtagMessagesHandlerFunc(c.Hashtag.GetHashtagMessages)
 
-	// api.HashtagInsertHashtagMessageHandler = hashtag.InsertHashtagMessageHandlerFunc(func(params hashtag.InsertHashtagMessageParams) middleware.Responder {
-	// 	return middleware.NotImplemented("operation hashtag.InsertHashtagMessage has not yet been implemented")
-	// })
+	// if api.HashtagsInsertHashtagMessageHandler == nil {
+	// 	api.HashtagsInsertHashtagMessageHandler = hashtags.InsertHashtagMessageHandlerFunc(func(params hashtags.InsertHashtagMessageParams) middleware.Responder {
+	// 		return middleware.NotImplemented("operation hashtags.InsertHashtagMessage has not yet been implemented")
+	// 	})
+	// }
 
 	api.PreServerShutdown = func() {}
 
