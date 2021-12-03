@@ -1,4 +1,4 @@
-APP_NAME = hashtag
+APP_NAME = hashchat
 
 # Creates (or updates) secrets object on the k8s cluster server
 upsert-secrets:

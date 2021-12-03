@@ -2,7 +2,7 @@
 FROM golang:1.13-stretch AS build
 
 ## setup project path
-WORKDIR /go/src/github.com/commit-app-playground/Hashchat
+WORKDIR /cache/hashchat
 
 COPY go.mod .
 COPY go.sum .
@@ -23,8 +23,12 @@ RUN make build
 
 ## copy binary to an alpine image
 FROM alpine
-COPY --from=build /go/src/github.com/commit-app-playground/Hashchat /app/
+
+# Allow glibc on alpine
+RUN mkdir /lib64 && ln -s /lib/libc.musl-x86_64.so.1 /lib64/ld-linux-x86-64.so.2
+
+COPY --from=build /cache/hashchat /app/
 ## execute binary as container entrypoint
 EXPOSE 80
 
-ENTRYPOINT /app/Hashchat
+ENTRYPOINT /app/hashchat
