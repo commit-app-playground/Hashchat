@@ -1,0 +1,94 @@
+consumes:
+  - application/json
+produces:
+  - application/json
+schemes:
+  - http
+swagger: "2.0"
+info:
+  description: Hashtag backend
+  title: Hashtag Service
+  version: 0.1.0
+basePath: /app/v1
+paths:
+  /hashtag/{hashtagId}/messages:
+    get:
+      tags:
+        - hashtags
+      operationId: getHashtagMessages
+      parameters:
+        - type: string
+          name: hashtagId
+          in: path
+          required: true
+      responses:
+        "200":
+          description: List of hashtag messages
+          schema:
+            $ref: "#/definitions/HashtagMessagesResponse"
+        default:
+          description: Unexpected error
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+    put:
+      tags:
+        - hashtags
+      operationId: insertHashtagMessage
+      parameters:
+        - type: string
+          name: hashtagId
+          in: path
+          required: true
+        - name: hashtagMessage
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/Message"
+      responses:
+        "200":
+          description: Hashtag messaged inserted
+          schema:
+            $ref: "#/definitions/HashtagResponse"
+        default:
+          description: Unexpected error
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+definitions:
+  HashtagMessagesResponse:
+    type: object
+    properties:
+      hashtagId:
+        type: string
+      messages:
+        type: array
+        items:
+          $ref: "#/definitions/Message"
+  Message:
+    type: object
+    properties:
+      id:
+        type: string
+      username:
+        type: string
+      created_at:
+        type: string
+        format: date-time
+      content:
+        type: string
+  HashtagResponse:
+    type: object
+    properties:
+      messageId:
+        type: string
+
+  ErrorResponse:
+    type: object
+    required:
+      - code
+      - message
+    properties:
+      code:
+        type: integer
+        format: int64
+      message:
+        type: string
