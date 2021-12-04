@@ -14,7 +14,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	api := operations.NewHashtagAPI(swaggerSpec)
+	api := operations.NewHashchatAPI(swaggerSpec)
 
 	server := restapi.NewServer(api)
 	defer server.Shutdown()
