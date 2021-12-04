@@ -24,8 +24,8 @@ spec:
             - containerPort: 80
               name: http
           envFrom:
-          - configMapRef:
-              name: hashchat-config
+            - configMapRef:
+                name: hashchat-config
           # Uncomment the secretRef block below if your Playground application has secrets
           # See the README for instructions on how to create secrets
           #- secretRef:
@@ -33,7 +33,7 @@ spec:
           readinessProbe:
             httpGet:
               port: http
-              path: /
+              path: /app/v1/status/alive
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 2

@@ -8,10 +8,12 @@ import (
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
+	"github.com/go-openapi/runtime/middleware"
 
 	"github.com/commit-app-playground/Hashchat/cmd/server/controllers"
 	"github.com/commit-app-playground/Hashchat/restapi/operations"
 	"github.com/commit-app-playground/Hashchat/restapi/operations/hashtags"
+	"github.com/commit-app-playground/Hashchat/restapi/operations/health"
 )
 
 //go:generate swagger generate server --target ../../Hashchat --name Hashchat --spec ../swagger/swagger.yml --principal models.Principal --exclude-main
@@ -47,6 +49,14 @@ func configureAPI(api *operations.HashchatAPI) http.Handler {
 	// 		return middleware.NotImplemented("operation hashtags.InsertHashtagMessage has not yet been implemented")
 	// 	})
 	// }
+
+	//Health
+	api.HealthGetLivenessHandler = health.GetLivenessHandlerFunc(func(params health.GetLivenessParams) middleware.Responder {
+		return health.NewGetLivenessOK().WithPayload("OK")
+	})
+	api.HealthGetReadinessHandler = health.GetReadinessHandlerFunc(func(params health.GetReadinessParams) middleware.Responder {
+		return health.NewGetReadinessOK().WithPayload("OK")
+	})
 
 	api.PreServerShutdown = func() {}
 

@@ -11,6 +11,28 @@ info:
   version: 0.1.0
 basePath: /app/v1
 paths:
+  /status/alive:
+    get:
+      tags:
+        - health
+      summary: Liveness check
+      operationId: getLiveness
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+  /status/ready:
+    get:
+      tags:
+        - health
+      summary: Readiness check
+      operationId: getReadiness
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
   /hashtag/{hashtagId}/messages:
     get:
       tags:
