@@ -4,17 +4,25 @@ package restapi
 
 import (
 	"crypto/tls"
+	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
+	"github.com/go-redis/redis"
 
 	"github.com/commit-app-playground/Hashchat/cmd/server/controllers"
 	"github.com/commit-app-playground/Hashchat/restapi/operations"
 	"github.com/commit-app-playground/Hashchat/restapi/operations/hashtags"
 	"github.com/commit-app-playground/Hashchat/restapi/operations/health"
 )
+
+type Author struct {
+	Name string `json:"name"`
+	Age  int    `json:"age"`
+}
 
 //go:generate swagger generate server --target ../../Hashchat --name Hashchat --spec ../swagger/swagger.yml --principal models.Principal --exclude-main
 
@@ -41,6 +49,29 @@ func configureAPI(api *operations.HashchatAPI) http.Handler {
 	api.JSONProducer = runtime.JSONProducer()
 
 	c := controllers.NewAllControllers()
+
+	client := redis.NewClient(&redis.Options{
+		Addr:     "redis:6379",
+		Password: "",
+		DB:       0,
+	})
+	pong, err := client.Ping().Result()
+	fmt.Println(pong, err)
+
+	json, err := json.Marshal(Author{Name: "Daniel", Age: 25})
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = client.Set("id1234", json, 0).Err()
+	if err != nil {
+		fmt.Println(err)
+	}
+	val, err := client.Get("id1234").Result()
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(val)
 
 	api.HashtagsGetHashtagMessagesHandler = hashtags.GetHashtagMessagesHandlerFunc(c.Hashtag.GetHashtagMessages)
 
