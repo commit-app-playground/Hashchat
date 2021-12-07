@@ -6,22 +6,46 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-redis/redis"
+	"github.com/gorilla/websocket"
 
 	"github.com/commit-app-playground/Hashchat/cmd/server/controllers"
 	"github.com/commit-app-playground/Hashchat/restapi/operations"
 	"github.com/commit-app-playground/Hashchat/restapi/operations/hashtags"
 	"github.com/commit-app-playground/Hashchat/restapi/operations/health"
+	"github.com/commit-app-playground/Hashchat/restapi/operations/user"
+	ws "github.com/commit-app-playground/Hashchat/restapi/operations/websocket"
 )
 
-type Author struct {
-	Name string `json:"name"`
-	Age  int    `json:"age"`
+type ChatMessage struct {
+	username string `json:"username"`
+	text     string `json:"text"`
+	time     string `json:"time"`
+	hashId   string `json:"hashId"`
+}
+
+type loggingWrapper struct {
+	defaultHandler http.Handler
+	loggingHandler http.Handler
+}
+
+var (
+	rdb *redis.Client
+)
+
+var clients = make(map[*websocket.Conn]bool)
+var broadcaster = make(chan ChatMessage)
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
 }
 
 //go:generate swagger generate server --target ../../Hashchat --name Hashchat --spec ../swagger/swagger.yml --principal models.Principal --exclude-main
@@ -50,36 +74,36 @@ func configureAPI(api *operations.HashchatAPI) http.Handler {
 
 	c := controllers.NewAllControllers()
 
-	client := redis.NewClient(&redis.Options{
+	// setup redis client and log ping for healthcheck
+	rdb = redis.NewClient(&redis.Options{
 		Addr:     "redis:6379",
 		Password: "",
 		DB:       0,
 	})
-	pong, err := client.Ping().Result()
+	pong, err := rdb.Ping().Result()
 	fmt.Println(pong, err)
 
-	json, err := json.Marshal(Author{Name: "Daniel", Age: 25})
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	err = client.Set("id1234", json, 0).Err()
-	if err != nil {
-		fmt.Println(err)
-	}
-	val, err := client.Get("id1234").Result()
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(val)
+	// handle incoming websocket connections
+	api.WebsocketConnectWebsocketHandler = ws.ConnectWebsocketHandlerFunc(handleConnections)
+	go handleMessages()
 
 	api.HashtagsGetHashtagMessagesHandler = hashtags.GetHashtagMessagesHandlerFunc(c.Hashtag.GetHashtagMessages)
 
-	// if api.HashtagsInsertHashtagMessageHandler == nil {
-	// 	api.HashtagsInsertHashtagMessageHandler = hashtags.InsertHashtagMessageHandlerFunc(func(params hashtags.InsertHashtagMessageParams) middleware.Responder {
-	// 		return middleware.NotImplemented("operation hashtags.InsertHashtagMessage has not yet been implemented")
-	// 	})
-	// }
+	if api.UserGetUserHashtagChannelsHandler == nil {
+		api.UserGetUserHashtagChannelsHandler = user.GetUserHashtagChannelsHandlerFunc(func(params user.GetUserHashtagChannelsParams) middleware.Responder {
+			return middleware.NotImplemented("operation user.GetUserHashtagChannels has not yet been implemented")
+		})
+	}
+	if api.HashtagsInsertHashtagMessageHandler == nil {
+		api.HashtagsInsertHashtagMessageHandler = hashtags.InsertHashtagMessageHandlerFunc(func(params hashtags.InsertHashtagMessageParams) middleware.Responder {
+			return middleware.NotImplemented("operation hashtags.InsertHashtagMessage has not yet been implemented")
+		})
+	}
+	if api.UserInsertHashtagsForUserHandler == nil {
+		api.UserInsertHashtagsForUserHandler = user.InsertHashtagsForUserHandlerFunc(func(params user.InsertHashtagsForUserParams) middleware.Responder {
+			return middleware.NotImplemented("operation user.InsertHashtagsForUser has not yet been implemented")
+		})
+	}
 
 	//Health
 	api.HealthGetLivenessHandler = health.GetLivenessHandlerFunc(func(params health.GetLivenessParams) middleware.Responder {
@@ -96,6 +120,131 @@ func configureAPI(api *operations.HashchatAPI) http.Handler {
 	return setupGlobalMiddleware(api.Serve(setupMiddlewares))
 }
 
+// handle incoming client connections
+func handleConnections(params ws.ConnectWebsocketParams) middleware.Responder {
+	log.Println("handleConnections")
+
+	return middleware.ResponderFunc(func(rw http.ResponseWriter, p runtime.Producer) {
+		log.Println("yurt")
+		ws, err := upgrader.Upgrade(rw, params.HTTPRequest, nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+		// ensure connection close when function returns
+		defer ws.Close()
+		clients[ws] = true
+
+		// if it's zero, no messages were ever sent/saved
+		if rdb.Exists("chat_messages").Val() != 0 {
+			sendPreviousMessages(ws)
+		}
+
+		for {
+			log.Println("for handleConnections")
+
+			var msg ChatMessage
+			// Read in a new message as JSON and map it to a Message object
+			log.Println(msg)
+
+			err := ws.ReadJSON(&msg)
+			if err != nil {
+				log.Println("for handleConnections err")
+				log.Println(err)
+
+				delete(clients, ws)
+				break
+			}
+			// send new message to the channel
+			broadcaster <- msg
+		}
+	})
+
+}
+
+func sendPreviousMessages(ws *websocket.Conn) {
+	log.Println("sendPreviousMessages")
+
+	chatMessages, err := rdb.LRange("chat_messages", 0, -1).Result()
+	if err != nil {
+		panic(err)
+	}
+
+	// send previous messages
+	for _, chatMessage := range chatMessages {
+		var msg ChatMessage
+		json.Unmarshal([]byte(chatMessage), &msg)
+		messageClient(ws, msg)
+	}
+}
+
+// If a message is sent while a client is closing, ignore the error
+func unsafeError(err error) bool {
+	log.Println("unsafeError")
+
+	return !websocket.IsCloseError(err, websocket.CloseGoingAway) && err != io.EOF
+}
+
+func handleMessages() {
+	log.Println("handling messages")
+	for {
+		// grab msg from 	channel
+		msg := <-broadcaster
+
+		// update redis & update users
+		// storeInRedis(msg)
+		messageClients(msg)
+
+	}
+}
+
+func messageClients(msg ChatMessage) {
+	log.Println("messageClients")
+
+	log.Println(msg)
+
+	// send to every client currently connected
+	for client := range clients {
+		messageClient(client, msg)
+	}
+}
+
+func messageClient(client *websocket.Conn, msg ChatMessage) {
+	log.Println("messageClient")
+
+	err := client.WriteJSON(msg)
+	if err != nil && unsafeError(err) {
+		log.Printf("error: %v", err)
+		client.Close()
+		delete(clients, client)
+	}
+}
+
+func storeInRedis(msg ChatMessage) {
+	log.Println("storeInRedis")
+
+	log.Println(msg)
+	json, err := json.Marshal(msg)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := rdb.RPush("chat_messages", json).Err(); err != nil {
+		panic(err)
+	}
+}
+
+// The middleware configuration is for the handler executors. These do not apply to the swagger.json document.
+// The middleware executes after routing but before authentication, binding and validation.
+func setupMiddlewares(handler http.Handler) http.Handler {
+	return handler
+}
+
+// The middleware configuration happens before anything, this middleware also applies to serving the swagger.json document.
+// So this is a good place to plug in a panic handling middleware, logging and metrics.
+func setupGlobalMiddleware(handler http.Handler) http.Handler {
+	return addLogging(handler)
+}
+
 // The TLS configuration before HTTPS server starts.
 func configureTLS(tlsConfig *tls.Config) {
 	// Make all necessary changes to the TLS configuration here.
@@ -108,14 +257,9 @@ func configureTLS(tlsConfig *tls.Config) {
 func configureServer(s *http.Server, scheme, addr string) {
 }
 
-// The middleware configuration is for the handler executors. These do not apply to the swagger.json document.
-// The middleware executes after routing but before authentication, binding and validation.
-func setupMiddlewares(handler http.Handler) http.Handler {
-	return handler
-}
-
-// The middleware configuration happens before anything, this middleware also applies to serving the swagger.json document.
-// So this is a good place to plug in a panic handling middleware, logging and metrics.
-func setupGlobalMiddleware(handler http.Handler) http.Handler {
-	return handler
+func addLogging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Println("received request:", r.Method, r.URL)
+		next.ServeHTTP(w, r)
+	})
 }

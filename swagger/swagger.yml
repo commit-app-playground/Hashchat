@@ -4,6 +4,7 @@ produces:
   - application/json
 schemes:
   - http
+  - ws
 swagger: "2.0"
 info:
   description: Hashtag backend
@@ -33,6 +34,62 @@ paths:
           description: OK
           schema:
             type: string
+  /websocket:
+    get:
+      tags:
+        - websocket
+      summary: connect websocket
+      schemes:
+        - ws
+      operationId: connectWebsocket
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+  /user/{username}:
+    get:
+      tags:
+        - user
+      operationId: getUserHashtagChannels
+      parameters:
+        - type: string
+          name: username
+          in: path
+          required: true
+      responses:
+        "200":
+          description: List of user hashtag channels
+          schema:
+            $ref: "#/definitions/UserHashtagChannels"
+        default:
+          description: Unexpected error
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+  /user/{username}/hashtag:
+    put:
+      tags:
+        - user
+      operationId: insertHashtagsForUser
+      parameters:
+        - type: string
+          name: username
+          in: path
+          required: true
+        - name: userHashtag
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/UserHashtag"
+      responses:
+        "200":
+          description: Hashtag linked to user
+          schema:
+            $ref: "#/definitions/HashtagResponse"
+        default:
+          description: Unexpected error
+          schema:
+            $ref: "#/definitions/ErrorResponse"
   /hashtag/{hashtagId}/messages:
     get:
       tags:
@@ -102,7 +159,20 @@ definitions:
     properties:
       messageId:
         type: string
-
+  UserHashtagChannels:
+    type: array
+    items:
+      $ref: '#/definitions/UserHashtag'
+  UserHashtag:
+    type: object
+    properties:
+      hashtagId:
+        type: string
+  HashtagResponse:
+    type: object
+    properties:
+      messageId:
+        type: string
   ErrorResponse:
     type: object
     required:

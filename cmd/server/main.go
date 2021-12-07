@@ -21,6 +21,7 @@ func main() {
 
 	server.Host = "0.0.0.0"
 	server.Port = 80
+	server.EnabledListeners = []string{"http", "ws"}
 
 	server.ConfigureAPI()
 
