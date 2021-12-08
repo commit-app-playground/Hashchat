@@ -3,6 +3,7 @@ package controllers
 import (
 	"github.com/commit-app-playground/Hashchat/cmd/server/controllers/hashtag"
 	"github.com/commit-app-playground/Hashchat/cmd/server/controllers/user"
+	"github.com/go-redis/redis"
 )
 
 type AllControllers struct {
@@ -10,9 +11,9 @@ type AllControllers struct {
 	User    *user.UserController
 }
 
-func NewAllControllers() *AllControllers {
+func NewAllControllers(redis *redis.Client) *AllControllers {
 	return &AllControllers{
-		Hashtag: hashtag.NewJobController(),
-		User:    user.NewUserController(),
+		Hashtag: hashtag.NewJobController(redis),
+		User:    user.NewUserController(redis),
 	}
 }

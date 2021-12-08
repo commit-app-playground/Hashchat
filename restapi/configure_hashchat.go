@@ -15,6 +15,7 @@ import (
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-redis/redis"
 	"github.com/gorilla/websocket"
+	"github.com/rs/cors"
 
 	"github.com/commit-app-playground/Hashchat/cmd/server/controllers"
 	"github.com/commit-app-playground/Hashchat/restapi/operations"
@@ -25,10 +26,10 @@ import (
 )
 
 type ChatMessage struct {
-	username string `json:"username"`
-	text     string `json:"text"`
-	time     string `json:"time"`
-	hashId   string `json:"hashId"`
+	Username string `json:"username"`
+	Text     string `json:"text"`
+	Time     string `json:"time"`
+	HashId   string `json:"hashId"`
 }
 
 type loggingWrapper struct {
@@ -72,8 +73,6 @@ func configureAPI(api *operations.HashchatAPI) http.Handler {
 
 	api.JSONProducer = runtime.JSONProducer()
 
-	c := controllers.NewAllControllers()
-
 	// setup redis client and log ping for healthcheck
 	rdb = redis.NewClient(&redis.Options{
 		Addr:     "redis:6379",
@@ -83,17 +82,17 @@ func configureAPI(api *operations.HashchatAPI) http.Handler {
 	pong, err := rdb.Ping().Result()
 	fmt.Println(pong, err)
 
+	c := controllers.NewAllControllers(rdb)
+
 	// handle incoming websocket connections
 	api.WebsocketConnectWebsocketHandler = ws.ConnectWebsocketHandlerFunc(handleConnections)
 	go handleMessages()
 
 	api.HashtagsGetHashtagMessagesHandler = hashtags.GetHashtagMessagesHandlerFunc(c.Hashtag.GetHashtagMessages)
 
-	if api.UserGetUserHashtagChannelsHandler == nil {
-		api.UserGetUserHashtagChannelsHandler = user.GetUserHashtagChannelsHandlerFunc(func(params user.GetUserHashtagChannelsParams) middleware.Responder {
-			return middleware.NotImplemented("operation user.GetUserHashtagChannels has not yet been implemented")
-		})
-	}
+	api.UserGetUserHashtagChannelsHandler = user.GetUserHashtagChannelsHandlerFunc(c.User.GetUserHashtagChannels)
+	api.UserInsertHashtagsForUserHandler = user.InsertHashtagsForUserHandlerFunc(c.User.InsertHashtagsForUser)
+
 	if api.HashtagsInsertHashtagMessageHandler == nil {
 		api.HashtagsInsertHashtagMessageHandler = hashtags.InsertHashtagMessageHandlerFunc(func(params hashtags.InsertHashtagMessageParams) middleware.Responder {
 			return middleware.NotImplemented("operation hashtags.InsertHashtagMessage has not yet been implemented")
@@ -158,7 +157,6 @@ func handleConnections(params ws.ConnectWebsocketParams) middleware.Responder {
 			broadcaster <- msg
 		}
 	})
-
 }
 
 func sendPreviousMessages(ws *websocket.Conn) {
@@ -168,6 +166,7 @@ func sendPreviousMessages(ws *websocket.Conn) {
 	if err != nil {
 		panic(err)
 	}
+	log.Println(chatMessages)
 
 	// send previous messages
 	for _, chatMessage := range chatMessages {
@@ -191,7 +190,7 @@ func handleMessages() {
 		msg := <-broadcaster
 
 		// update redis & update users
-		// storeInRedis(msg)
+		storeInRedis(msg)
 		messageClients(msg)
 
 	}
@@ -242,6 +241,8 @@ func setupMiddlewares(handler http.Handler) http.Handler {
 // The middleware configuration happens before anything, this middleware also applies to serving the swagger.json document.
 // So this is a good place to plug in a panic handling middleware, logging and metrics.
 func setupGlobalMiddleware(handler http.Handler) http.Handler {
+	handler = HandleCORS(handler)
+
 	return addLogging(handler)
 }
 
@@ -255,6 +256,18 @@ func configureTLS(tlsConfig *tls.Config) {
 // This function can be called multiple times, depending on the number of serving schemes.
 // scheme value will be set accordingly: "http", "https" or "unix".
 func configureServer(s *http.Server, scheme, addr string) {
+}
+
+func HandleCORS(handler http.Handler) http.Handler {
+	corsHandler := cors.New(cors.Options{
+		Debug:            false,
+		AllowedOrigins:   []string{"*"},
+		AllowedHeaders:   []string{"*"},
+		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPut},
+		AllowCredentials: true,
+		MaxAge:           1000,
+	})
+	return corsHandler.Handler(handler)
 }
 
 func addLogging(next http.Handler) http.Handler {

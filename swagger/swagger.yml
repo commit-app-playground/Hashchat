@@ -162,7 +162,7 @@ definitions:
   UserHashtagChannels:
     type: array
     items:
-      $ref: '#/definitions/UserHashtag'
+      type: string
   UserHashtag:
     type: object
     properties:
