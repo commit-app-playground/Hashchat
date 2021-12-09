@@ -268,10 +268,6 @@ func configureServer(s *http.Server, scheme, addr string) {
 func addLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Println("received request:", r.Method, r.URL, r.Body)
-		if r.Method == "OPTIONS" {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.WriteHeader(http.StatusOK)
-		}
 		next.ServeHTTP(w, r)
 	})
 }

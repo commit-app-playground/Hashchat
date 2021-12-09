@@ -8,18 +8,11 @@ metadata:
     nginx.ingress.kubernetes.io/rewrite-target: /$1
     # cert-manager
     ingress.kubernetes.io/ssl-redirect: "true"
-    cert-manager.io/cluster-issuer: clusterissuer-letsencrypt-production
-    # CORS
-    ######################################################################################################################
-    # This snippet automatically enables CORS for the referrer of any HTTP request.
-    # It is here to simplify CORS headaches for Playground apps only and is *NOT* to be used in a real production setting.
-    # Snippet based off https://qa.lsproc.com/post/access-control-allow-origin-multiple-origin-domains.
-    ######################################################################################################################
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      add_header 'Access-Control-Allow-Origin' "*";
-      add_header 'Access-Control-Allow-Credentials' 'true';
-      add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, OPTIONS';
-      add_header 'Access-Control-Allow-Headers' 'DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type';
+    cert-manager.io/cluster-issuer:
+      clusterissuer-letsencrypt-production
+      # CORS
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "http_origin"
 
 spec:
   rules:
