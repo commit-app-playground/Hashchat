@@ -77,7 +77,6 @@ paths:
           required: true
         - name: userHashtag
           in: body
-          required: true
           schema:
             $ref: "#/definitions/UserHashtag"
       responses:
