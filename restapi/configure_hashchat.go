@@ -90,16 +90,12 @@ func configureAPI(api *operations.HashchatAPI) http.Handler {
 	api.HashtagsGetHashtagMessagesHandler = hashtags.GetHashtagMessagesHandlerFunc(c.Hashtag.GetHashtagMessages)
 
 	api.UserGetUserHashtagChannelsHandler = user.GetUserHashtagChannelsHandlerFunc(c.User.GetUserHashtagChannels)
+	api.UserPostUserChangeHandler = user.PostUserChangeHandlerFunc(c.User.PostUserChange)
 	api.UserInsertHashtagsForUserHandler = user.InsertHashtagsForUserHandlerFunc(c.User.InsertHashtagsForUser)
 
 	if api.HashtagsInsertHashtagMessageHandler == nil {
 		api.HashtagsInsertHashtagMessageHandler = hashtags.InsertHashtagMessageHandlerFunc(func(params hashtags.InsertHashtagMessageParams) middleware.Responder {
 			return middleware.NotImplemented("operation hashtags.InsertHashtagMessage has not yet been implemented")
-		})
-	}
-	if api.UserInsertHashtagsForUserHandler == nil {
-		api.UserInsertHashtagsForUserHandler = user.InsertHashtagsForUserHandlerFunc(func(params user.InsertHashtagsForUserParams) middleware.Responder {
-			return middleware.NotImplemented("operation user.InsertHashtagsForUser has not yet been implemented")
 		})
 	}
 

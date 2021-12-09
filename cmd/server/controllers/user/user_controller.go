@@ -84,6 +84,13 @@ func (u *UserController) GetUserHashtagChannels(params user.GetUserHashtagChanne
 
 }
 
+func (u *UserController) PostUserChange(params user.PostUserChangeParams) middleware.Responder {
+	log.Println("PostUserChange")
+	payload := models.UserHashtagChannels{}
+	return user.NewPostUserChangeOK().WithPayload(payload)
+
+}
+
 func (u *UserController) InsertHashtagsForUser(params user.InsertHashtagsForUserParams) middleware.Responder {
 	log.Println("InsertHashtagsForUser")
 	payload := &models.HashtagResponse{}

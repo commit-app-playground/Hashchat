@@ -66,6 +66,24 @@ paths:
           description: Unexpected error
           schema:
             $ref: "#/definitions/ErrorResponse"
+    post:
+      tags:
+        - user
+      operationId: postUserChange
+      parameters:
+        - type: string
+          name: username
+          in: path
+          required: true
+      responses:
+        "200":
+          description: List of user hashtag channels
+          schema:
+            $ref: "#/definitions/UserHashtagChannels"
+        default:
+          description: Unexpected error
+          schema:
+            $ref: "#/definitions/ErrorResponse"
   /user/{username}/hashtag:
     post:
       tags:
