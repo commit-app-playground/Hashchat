@@ -15,6 +15,7 @@ import (
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-redis/redis"
 	"github.com/gorilla/websocket"
+	"github.com/rs/cors"
 
 	"github.com/commit-app-playground/Hashchat/cmd/server/controllers"
 	"github.com/commit-app-playground/Hashchat/restapi/operations"
@@ -240,7 +241,7 @@ func setupMiddlewares(handler http.Handler) http.Handler {
 // The middleware configuration happens before anything, this middleware also applies to serving the swagger.json document.
 // So this is a good place to plug in a panic handling middleware, logging and metrics.
 func setupGlobalMiddleware(handler http.Handler) http.Handler {
-	// handler = HandleCORS(handler)
+	handler = HandleCORS(handler)
 
 	return addLogging(handler)
 }
@@ -257,17 +258,17 @@ func configureTLS(tlsConfig *tls.Config) {
 func configureServer(s *http.Server, scheme, addr string) {
 }
 
-// func HandleCORS(handler http.Handler) http.Handler {
-// 	corsHandler := cors.New(cors.Options{
-// 		Debug:            false,
-// 		AllowedOrigins:   []string{"http://localhost:8080", "http://localhost:8081"},
-// 		AllowedHeaders:   []string{"*"},
-// 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPut},
-// 		AllowCredentials: true,
-// 		MaxAge:           1000,
-// 	})
-// 	return corsHandler.Handler(handler)
-// }
+func HandleCORS(handler http.Handler) http.Handler {
+	corsHandler := cors.New(cors.Options{
+		Debug:            false,
+		AllowedOrigins:   []string{"https://hashchat-fe.spa.onboarding.dev"},
+		AllowedHeaders:   []string{"*"},
+		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPut},
+		AllowCredentials: true,
+		MaxAge:           1000,
+	})
+	return corsHandler.Handler(handler)
+}
 
 func addLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
