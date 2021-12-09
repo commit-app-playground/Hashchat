@@ -67,7 +67,7 @@ paths:
           schema:
             $ref: "#/definitions/ErrorResponse"
   /user/{username}/hashtag:
-    put:
+    post:
       tags:
         - user
       operationId: insertHashtagsForUser
@@ -109,7 +109,7 @@ paths:
           description: Unexpected error
           schema:
             $ref: "#/definitions/ErrorResponse"
-    put:
+    post:
       tags:
         - hashtags
       operationId: insertHashtagMessage
