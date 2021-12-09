@@ -69,17 +69,22 @@ paths:
     post:
       tags:
         - user
-      operationId: postUserChange
+      operationId: postUserHashtag
       parameters:
         - type: string
           name: username
           in: path
           required: true
+        - name: userHashtag
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/UserHashtag"
       responses:
         "200":
-          description: List of user hashtag channels
+          description: Hashtag linked to user
           schema:
-            $ref: "#/definitions/UserHashtagChannels"
+            $ref: "#/definitions/HashtagResponse"
         default:
           description: Unexpected error
           schema:

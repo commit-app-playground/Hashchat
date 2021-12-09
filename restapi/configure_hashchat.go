@@ -90,7 +90,7 @@ func configureAPI(api *operations.HashchatAPI) http.Handler {
 	api.HashtagsGetHashtagMessagesHandler = hashtags.GetHashtagMessagesHandlerFunc(c.Hashtag.GetHashtagMessages)
 
 	api.UserGetUserHashtagChannelsHandler = user.GetUserHashtagChannelsHandlerFunc(c.User.GetUserHashtagChannels)
-	api.UserPostUserChangeHandler = user.PostUserChangeHandlerFunc(c.User.PostUserChange)
+	api.UserPostUserHashtagHandler = user.PostUserHashtagHandlerFunc(c.User.PostUserHashtag)
 	api.UserInsertHashtagsForUserHandler = user.InsertHashtagsForUserHandlerFunc(c.User.InsertHashtagsForUser)
 
 	if api.HashtagsInsertHashtagMessageHandler == nil {
