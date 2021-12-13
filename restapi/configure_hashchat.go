@@ -9,6 +9,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
+	"strings"
+	"time"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
@@ -24,10 +27,22 @@ import (
 	ws "github.com/commit-app-playground/Hashchat/restapi/operations/websocket"
 )
 
+type WebSocketMessage struct {
+	ChatMessage *ChatMessage
+	MoveChannel *MoveChannel
+}
+
 type ChatMessage struct {
+	Username          string    `json:"username"`
+	Text              string    `json:"text"`
+	Time              time.Time `json:"time"`
+	HashId            string    `json:"hashId"`
+	ActiveConnections int64     `json:"activeConnections"`
+	ActiveUsers       []string  `json:"activeUsers"`
+}
+
+type MoveChannel struct {
 	Username string `json:"username"`
-	Text     string `json:"text"`
-	Time     string `json:"time"`
 	HashId   string `json:"hashId"`
 }
 
@@ -40,7 +55,8 @@ var (
 	rdb *redis.Client
 )
 
-var clients = make(map[*websocket.Conn]bool)
+var clients = make(map[*websocket.Conn]string)
+var channelConnections = make(map[string]int64)
 var broadcaster = make(chan ChatMessage)
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -91,7 +107,6 @@ func configureAPI(api *operations.HashchatAPI) http.Handler {
 
 	api.UserGetUserHashtagChannelsHandler = user.GetUserHashtagChannelsHandlerFunc(c.User.GetUserHashtagChannels)
 	api.UserPostUserHashtagHandler = user.PostUserHashtagHandlerFunc(c.User.PostUserHashtag)
-	api.UserInsertHashtagsForUserHandler = user.InsertHashtagsForUserHandlerFunc(c.User.InsertHashtagsForUser)
 
 	if api.HashtagsInsertHashtagMessageHandler == nil {
 		api.HashtagsInsertHashtagMessageHandler = hashtags.InsertHashtagMessageHandlerFunc(func(params hashtags.InsertHashtagMessageParams) middleware.Responder {
@@ -116,72 +131,137 @@ func configureAPI(api *operations.HashchatAPI) http.Handler {
 
 // handle incoming client connections
 func handleConnections(params ws.ConnectWebsocketParams) middleware.Responder {
-	log.Println("handleConnections")
 
 	return middleware.ResponderFunc(func(rw http.ResponseWriter, p runtime.Producer) {
-		log.Println("yurt")
 		ws, err := upgrader.Upgrade(rw, params.HTTPRequest, nil)
 		if err != nil {
 			log.Fatal(err)
 		}
 		// ensure connection close when function returns
 		defer ws.Close()
-		clients[ws] = true
-
-		// if it's zero, no messages were ever sent/saved
-		if rdb.Exists("chat_messages").Val() != 0 {
-			sendPreviousMessages(ws)
-		}
+		clients[ws] = ""
 
 		for {
-			log.Println("for handleConnections")
+			var wsmsg WebSocketMessage
+			// Read in a new message as JSON and map it to a WebSocket object
 
-			var msg ChatMessage
-			// Read in a new message as JSON and map it to a Message object
-			log.Println(msg)
-
-			err := ws.ReadJSON(&msg)
+			err := ws.ReadJSON(&wsmsg)
 			if err != nil {
-				log.Println("for handleConnections err")
-				log.Println(err)
+				hashtagId := clients[ws]
 
 				delete(clients, ws)
+				decrementChannelUsers(hashtagId)
 				break
 			}
+
 			// send new message to the channel
-			broadcaster <- msg
+			if wsmsg.ChatMessage != nil {
+				broadcaster <- *wsmsg.ChatMessage
+
+				// move channels, send any existing messages
+			} else if wsmsg.MoveChannel != nil {
+				oldTag := clients[ws]
+				if oldTag != "" {
+					decrementChannelUsers(oldTag)
+				}
+				clients[ws] = wsmsg.MoveChannel.HashId
+
+				multiHashtagChannel := strings.Split(wsmsg.MoveChannel.HashId, ",")
+
+				// either multihastag channel or single hastag channel
+				if len(multiHashtagChannel) > 1 {
+					for _, c := range multiHashtagChannel {
+						channelConnections[c] += 1
+					}
+					hashtagMessages := grabMultiChannelChatMessages(multiHashtagChannel)
+
+					for _, chatMessage := range hashtagMessages {
+						chatMessage.ActiveConnections = channelConnections[chatMessage.HashId]
+						messageClient(ws, chatMessage)
+					}
+				} else {
+					channelConnections[wsmsg.MoveChannel.HashId] += 1
+					if rdb.Exists(wsmsg.MoveChannel.HashId).Val() != 0 {
+						sendPreviousMessages(ws, wsmsg.MoveChannel.HashId)
+					}
+				}
+			}
 		}
 	})
 }
 
-func sendPreviousMessages(ws *websocket.Conn) {
-	log.Println("sendPreviousMessages")
+func incrementChannelUsers(hashtagId string) {
+	multiHashtagChannel := strings.Split(hashtagId, ",")
+	if len(multiHashtagChannel) > 1 {
+		for _, c := range multiHashtagChannel {
+			channelConnections[c] += 1
+		}
+	} else {
+		channelConnections[hashtagId] += 1
+	}
+}
 
-	chatMessages, err := rdb.LRange("chat_messages", 0, -1).Result()
+func decrementChannelUsers(hashtagId string) {
+	multiHashtagChannel := strings.Split(hashtagId, ",")
+	if len(multiHashtagChannel) > 1 {
+		for _, c := range multiHashtagChannel {
+			channelConnections[c] -= 1
+		}
+	} else {
+		channelConnections[hashtagId] -= 1
+	}
+}
+
+func grabChatMessages(hashtagId string) []string {
+
+	chatMessages, err := rdb.LRange(hashtagId, 0, -1).Result()
 	if err != nil {
 		panic(err)
 	}
-	log.Println(chatMessages)
+	return chatMessages
+}
 
+func grabMultiChannelChatMessages(hashtags []string) []ChatMessage {
+	var allStringMessages []string
+	var msgs []ChatMessage
+
+	for _, key := range hashtags {
+		allStringMessages = append(allStringMessages, grabChatMessages(key)...)
+	}
+
+	for _, chatMessage := range allStringMessages {
+		var msg ChatMessage
+		log.Println(chatMessage)
+		json.Unmarshal([]byte(chatMessage), &msg)
+		msgs = append(msgs, msg)
+	}
+
+	sort.Slice(msgs, func(i, j int) bool {
+		return msgs[i].Time.Before(msgs[j].Time)
+	})
+
+	return msgs
+}
+
+func sendPreviousMessages(ws *websocket.Conn, hashtagId string) {
+	chatMessages := grabChatMessages(hashtagId)
 	// send previous messages
 	for _, chatMessage := range chatMessages {
 		var msg ChatMessage
 		json.Unmarshal([]byte(chatMessage), &msg)
+		msg.ActiveConnections = channelConnections[hashtagId]
 		messageClient(ws, msg)
 	}
 }
 
 // If a message is sent while a client is closing, ignore the error
 func unsafeError(err error) bool {
-	log.Println("unsafeError")
-
 	return !websocket.IsCloseError(err, websocket.CloseGoingAway) && err != io.EOF
 }
 
 func handleMessages() {
-	log.Println("handling messages")
 	for {
-		// grab msg from 	channel
+		// grab msg from channel
 		msg := <-broadcaster
 
 		// update redis & update users
@@ -192,37 +272,35 @@ func handleMessages() {
 }
 
 func messageClients(msg ChatMessage) {
-	log.Println("messageClients")
-
-	log.Println(msg)
-
 	// send to every client currently connected
-	for client := range clients {
-		messageClient(client, msg)
+	for client, hashId := range clients {
+		multiHashtagChannel := strings.Split(hashId, ",")
+		log.Println(multiHashtagChannel)
+
+		for _, c := range multiHashtagChannel {
+			if c == msg.HashId {
+				messageClient(client, msg)
+			}
+		}
 	}
 }
 
 func messageClient(client *websocket.Conn, msg ChatMessage) {
-	log.Println("messageClient")
-
 	err := client.WriteJSON(msg)
 	if err != nil && unsafeError(err) {
-		log.Printf("error: %v", err)
 		client.Close()
 		delete(clients, client)
+		decrementChannelUsers(msg.HashId)
 	}
 }
 
 func storeInRedis(msg ChatMessage) {
-	log.Println("storeInRedis")
-
-	log.Println(msg)
 	json, err := json.Marshal(msg)
 	if err != nil {
 		panic(err)
 	}
 
-	if err := rdb.RPush("chat_messages", json).Err(); err != nil {
+	if err := rdb.RPush(msg.HashId, json).Err(); err != nil {
 		panic(err)
 	}
 }
@@ -236,6 +314,7 @@ func setupMiddlewares(handler http.Handler) http.Handler {
 // The middleware configuration happens before anything, this middleware also applies to serving the swagger.json document.
 // So this is a good place to plug in a panic handling middleware, logging and metrics.
 func setupGlobalMiddleware(handler http.Handler) http.Handler {
+	// local only
 	// handler = HandleCORS(handler)
 
 	return addLogging(handler)

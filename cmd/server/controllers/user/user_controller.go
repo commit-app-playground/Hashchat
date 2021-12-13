@@ -87,8 +87,8 @@ func (u *UserController) GetUserHashtagChannels(params user.GetUserHashtagChanne
 func (u *UserController) PostUserHashtag(params user.PostUserHashtagParams) middleware.Responder {
 	log.Println("PostUserHashtag")
 	payload := &models.HashtagResponse{}
-
 	userKey := fmt.Sprintf("%s-channels:%s", params.Username, params.UserHashtag.HashtagID)
+
 	_, err := u.redis.HMSet(userKey, map[string]interface{}{
 		"hashtagId": params.UserHashtag.HashtagID,
 	}).Result()
@@ -105,30 +105,6 @@ func (u *UserController) PostUserHashtag(params user.PostUserHashtagParams) midd
 	}
 
 	return user.NewPostUserHashtagOK().WithPayload(payload)
-}
-
-func (u *UserController) InsertHashtagsForUser(params user.InsertHashtagsForUserParams) middleware.Responder {
-	log.Println("InsertHashtagsForUser")
-	payload := &models.HashtagResponse{}
-
-	userKey := fmt.Sprintf("%s-channels:%s", params.Username, params.UserHashtag.HashtagID)
-	_, err := u.redis.HMSet(userKey, map[string]interface{}{
-		"hashtagId": params.UserHashtag.HashtagID,
-	}).Result()
-	if err != nil {
-		fmt.Println(err.Error())
-		return user.NewInsertHashtagsForUserDefault(401)
-	}
-
-	sAddKey := fmt.Sprintf("%s-channels:Ids", params.Username)
-	_, err = u.redis.SAdd(sAddKey, params.UserHashtag.HashtagID).Result()
-	if err != nil {
-		fmt.Println(err.Error())
-		return user.NewInsertHashtagsForUserDefault(401)
-	}
-
-	return user.NewInsertHashtagsForUserOK().WithPayload(payload)
-
 }
 
 func (u *UserController) getUserFromListByUsername(username string) (*User, error) {

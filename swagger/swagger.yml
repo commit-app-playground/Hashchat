@@ -88,30 +88,6 @@ paths:
           description: Unexpected error
           schema:
             $ref: "#/definitions/ErrorResponse"
-  /user/{username}/hashtag:
-    post:
-      tags:
-        - user
-      operationId: insertHashtagsForUser
-      parameters:
-        - type: string
-          name: username
-          in: path
-          required: true
-        - name: userHashtag
-          in: body
-          required: true
-          schema:
-            $ref: "#/definitions/UserHashtag"
-      responses:
-        "200":
-          description: Hashtag linked to user
-          schema:
-            $ref: "#/definitions/HashtagResponse"
-        default:
-          description: Unexpected error
-          schema:
-            $ref: "#/definitions/ErrorResponse"
   /hashtag/{hashtagId}/messages:
     get:
       tags:
